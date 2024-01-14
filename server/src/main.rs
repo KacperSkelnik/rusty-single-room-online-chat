@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
 use std::net::SocketAddr;
-use tokio::io::{BufReader, AsyncWriteExt, AsyncBufReadExt};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::broadcast;
 use tokio::sync::broadcast::Sender;
@@ -9,7 +9,7 @@ use tokio::sync::broadcast::Sender;
 struct Message {
     user_name: String,
     message: String,
-    address:  SocketAddr
+    address: SocketAddr,
 }
 
 impl Display for Message {
@@ -18,19 +18,26 @@ impl Display for Message {
     }
 }
 
-async fn process_single_connection(mut socket: TcpStream, address: SocketAddr, sender: Sender<Message>) {
-
+async fn process_single_connection(
+    mut socket: TcpStream,
+    address: SocketAddr,
+    sender: Sender<Message>,
+) {
     let mut receiver = sender.subscribe();
 
     let (read, mut write) = socket.split();
     let mut reader = BufReader::new(read);
     let mut line = String::new();
 
-    let user_name = reader.read_line(&mut line).await.map(|_| {
-        let user_name = line.clone();
-        line.clear();
-        user_name
-    }).unwrap();
+    let user_name = reader
+        .read_line(&mut line)
+        .await
+        .map(|_| {
+            let user_name = line.clone();
+            line.clear();
+            user_name
+        })
+        .unwrap();
 
     loop {
         tokio::select! {
@@ -47,19 +54,25 @@ async fn process_single_connection(mut socket: TcpStream, address: SocketAddr, s
             }
         }
     }
-
 }
 
 #[tokio::main]
 async fn main() {
-
-    let listener = TcpListener::bind("localhost:8080").await.expect("Unable to create TCP server!");
+    let listener = TcpListener::bind("localhost:8080")
+        .await
+        .expect("Unable to create TCP server!");
     let (sender, _receiver) = broadcast::channel::<Message>(1024);
 
     loop {
-        listener.accept().await.map( | (socket, addr)| {
-            let sender = sender.clone();
-            tokio::spawn(async move { process_single_connection(socket, addr, sender.clone()).await });
-        }).expect("Server unable to handle user connection!");
+        listener
+            .accept()
+            .await
+            .map(|(socket, addr)| {
+                let sender = sender.clone();
+                tokio::spawn(async move {
+                    process_single_connection(socket, addr, sender.clone()).await
+                });
+            })
+            .expect("Server unable to handle user connection!");
     }
 }
